@@ -245,7 +245,7 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
     <section class="panel">
       <div class="row"><span class="lbl">Carboidrati in sella</span><span class="small muted">prossime uscite</span></div>
       <div id="fuel-body"><div class="skel"></div></div>
-      <p class="note">In acqua: 500-750 ml all'ora, di più con il caldo. Oltre le 2 ore aggiungi sali, circa 400-700 mg di sodio all'ora.</p>
+      <p class="note">In acqua: 500-750 ml all'ora, di più con il caldo. Oltre le 2 ore aggiungi uno stick di elettroliti Cetilar: con i gel al sodio arrivi a circa 400-700 mg di sodio all'ora.</p>
     </section>
     <section class="panel">
       <div class="row"><span class="lbl">Fabbisogno del giorno</span><span class="small muted" id="day-weight"></span></div>
@@ -710,7 +710,7 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
       const per = f.hi ? `${f.lo}-${f.hi} g/h` : "pasto normale prima";
       return `<li><div class="fuel"><span class="small muted">${evDay(e)===TODAY?"Oggi":esc(fmtDay(evDay(e)))} · ${f.mins}′ · ${esc(f.kind)}</span><span></span><span class="act-name">${esc(stripPrefix(e.name))}</span><span class="big">${big}</span><span class="small muted">${f.hi?`${f.bottles} borracce da 500 ml · ${f.mins>120?"con sali":"acqua"}`:"una borraccia d'acqua"}</span><span class="small muted" style="text-align:right">${per}</span></div></li>`;
     }).join("")}</ul>
-    <p class="note">Con i tuoi prodotti: Isocarb C21 in borraccia, un gel Enervit C21 ogni 40 minuti, una barretta C21 nella prima ora. Usa le uscite lunghe per provare le dosi della gara, così l'intestino si abitua.</p>`;
+    <p class="note">Con i tuoi prodotti: Enervit Isocarb 2:1 in borraccia, un gel Enervit 2:1 limone con sodio ogni 40 minuti, una barretta Enervit 2:1 brownie nella prima ora, e uno stick di elettroliti Cetilar nella seconda borraccia oltre le 2 ore. Usa le uscite lunghe per provare le dosi della gara, così l'intestino si abitua.</p>`;
     renderDay();
   }
   function renderDay(){
@@ -741,10 +741,10 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
     const S = [
       {n:"Creatina monoidrato", d:"3-5 g al giorno", ev:["a","Prove solide"], h:"Utile nella fase di forza in palestra. Tutti i giorni, a qualsiasi ora. Può portare 1-2 kg di acqua in più sulla bilancia: non è grasso."},
       {n:"Caffeina", d:`circa ${caf} mg (3 mg/kg)`, ev:["a","Prove solide"], h:"45-60' prima delle sedute di qualità o del test FTP. Visto che dormi spesso poco e ti alleni nel pomeriggio, evitala dopo le 14 nei giorni normali e tienila per il test e le uscite del mattino."},
-      {n:"Carboidrati in sella", d:"gel, barrette, bevande", ev:["a","Prove solide"], h:"È l'integrazione che conta di più. Le dosi sono calcolate sopra per ogni uscita."},
+      {n:"Carboidrati in sella", d:"Isocarb 2:1, gel 2:1 limone con sodio, barrette 2:1 brownie", ev:["a","Prove solide"], h:"È l'integrazione che conta di più. Il rapporto 2:1 tra glucosio e fruttosio permette di assorbire fino a 90 g all'ora con meno problemi di stomaco. Le dosi sono calcolate sopra per ogni uscita."},
       {n:"Vitamina D", d:"solo se carente", ev:["b","Se serve"], h:"In inverno è comune averla bassa. Fai prima un esame del sangue e decidi la dose con il medico."},
       {n:"Nitrati (succo di barbabietola)", d:"2-3 ore prima", ev:["b","Prove moderate"], h:"Piccolo aiuto negli sforzi da 5 a 30 minuti, quindi sensato per il test FTP. Provalo prima in allenamento."},
-      {n:"Sali e elettroliti", d:"400-700 mg sodio/h", ev:["b","Se serve"], h:"Nelle uscite oltre 2 ore o con il caldo, soprattutto se sudi molto."},
+      {n:"Elettroliti Cetilar", d:"1 stick in borraccia", ev:["b","Se serve"], h:"Nelle uscite oltre 2 ore o con il caldo, soprattutto se sudi molto. Insieme al sodio dei gel copre circa 400-700 mg di sodio all'ora."},
       {n:"Proteine in polvere", d:"25-40 g", ev:["c","Comodità"], h:"Non servono se arrivi alle proteine con il cibo. Comode dopo le sedute quando non hai un pasto vicino."},
     ];
     $("supp-body").innerHTML = S.map(s=>`<div class="supp"><div class="row"><span class="act-name">${esc(s.n)}</span><span class="ev ${s.ev[0]}">${esc(s.ev[1])}</span></div><span class="mono small" style="color:var(--gold-hi)">${esc(s.d)}</span><span class="small muted">${esc(s.h)}</span></div>`).join("")
@@ -768,13 +768,13 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
       "10 fette biscottate di kamut o senza glutine con un velo di marmellata e un velo di olio di cocco",
       "150 g di yogurt greco 0%"]},
     {t:"Trasferimento e griglia", items:[
-      "500 ml di acqua con 40 g di Isocarb C21, a sorsi durante il viaggio",
-      "1 barretta C21 appena entri in griglia",
-      "1 gel Enervit C21 con sodio"]},
+      "500 ml di acqua con 40 g di Enervit Isocarb 2:1, a sorsi durante il viaggio",
+      "1 barretta Enervit 2:1 brownie appena entri in griglia",
+      "1 gel Enervit 2:1 limone con sodio"]},
     {t:"In gara", items:[
-      "2 borracce da 750 ml, ognuna con 60 g di Isocarb C21 e 30 g di Isotonic Enervit: un sorso ogni 10 minuti",
-      "Al km 75 riempi una borraccia con acqua e una busta da 60 g di Isocarb C21",
-      "Ogni 40 minuti un gel Enervit C21 sodio, alternato al pickle shot di sicurezza"]},
+      "2 borracce da 750 ml, ognuna con 60 g di Enervit Isocarb 2:1 e 30 g di Isotonic Enervit: un sorso ogni 10 minuti",
+      "Al km 75 riempi una borraccia con acqua e una busta da 60 g di Enervit Isocarb 2:1",
+      "Ogni 40 minuti un gel Enervit 2:1 limone con sodio, alternato al pickle shot di sicurezza"]},
   ];
   function renderRace(){
     const el = document.getElementById("race-body"); if (!el) return;
