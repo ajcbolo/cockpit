@@ -143,6 +143,12 @@ details.card .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12
 .supp{display:flex;flex-direction:column;gap:4px;padding:11px 0;border-top:1px solid var(--line-soft)}
 .supp:first-child{border-top:0;padding-top:0}
 .note{font-size:.8rem;color:var(--muted);border-left:2px solid var(--gold-lo);padding-left:10px}
+.race{list-style:none;margin:0;padding:0 0 0 18px;border-left:1px solid var(--gold-lo);display:flex;flex-direction:column;gap:14px}
+.race>li{position:relative}
+.race>li::before{content:"";position:absolute;left:-23px;top:5px;width:9px;height:9px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px rgba(212,175,90,.6)}
+.race-t{font-family:var(--f-display);font-weight:600;color:var(--gold-hi);letter-spacing:.03em}
+.race ul{margin:4px 0 0;padding-left:16px;display:flex;flex-direction:column;gap:3px;font-size:.88rem;color:var(--fg)}
+.race ul li::marker{color:var(--gold-lo)}
 /* tab bar */
 nav.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;
   padding:6px max(10px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px));
@@ -248,6 +254,11 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
     <section class="panel">
       <div class="row"><span class="lbl">Cosa hai bruciato</span><span class="small muted">carboidrati usati, 14 giorni</span></div>
       <div id="burn-body"><div class="skel"></div></div>
+    </section>
+    <section class="panel">
+      <div class="row"><span class="lbl">Protocollo gara</span><span class="small muted">dal giorno prima al traguardo</span></div>
+      <p class="small muted">Il piano usato per la Strade Bianche. Va bene per gare e granfondo dalle 3 ore in su.</p>
+      <div id="race-body"></div>
     </section>
     <section class="panel">
       <span class="lbl">Integratori</span>
@@ -699,7 +710,7 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
       const per = f.hi ? `${f.lo}-${f.hi} g/h` : "pasto normale prima";
       return `<li><div class="fuel"><span class="small muted">${evDay(e)===TODAY?"Oggi":esc(fmtDay(evDay(e)))} · ${f.mins}′ · ${esc(f.kind)}</span><span></span><span class="act-name">${esc(stripPrefix(e.name))}</span><span class="big">${big}</span><span class="small muted">${f.hi?`${f.bottles} borracce da 500 ml · ${f.mins>120?"con sali":"acqua"}`:"una borraccia d'acqua"}</span><span class="small muted" style="text-align:right">${per}</span></div></li>`;
     }).join("")}</ul>
-    <p class="note">Esempi da 25-30 g di carboidrati: una banana, un gel, una barretta piccola, 500 ml di bevanda al 5-6%. Prima delle uscite lunghe allena l'intestino partendo da 60 g/h.</p>`;
+    <p class="note">Con i tuoi prodotti: Isocarb C21 in borraccia, un gel Enervit C21 ogni 40 minuti, una barretta C21 nella prima ora. Usa le uscite lunghe per provare le dosi della gara, così l'intestino si abitua.</p>`;
     renderDay();
   }
   function renderDay(){
@@ -738,6 +749,36 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
     ];
     $("supp-body").innerHTML = S.map(s=>`<div class="supp"><div class="row"><span class="act-name">${esc(s.n)}</span><span class="ev ${s.ev[0]}">${esc(s.ev[1])}</span></div><span class="mono small" style="color:var(--gold-hi)">${esc(s.d)}</span><span class="small muted">${esc(s.h)}</span></div>`).join("")
       + `<div class="supp"><span class="lbl">Per il test del 3 novembre</span><span class="small muted">Il giorno prima pasti ricchi di carboidrati e niente pesi. La mattina colazione abbondante 3 ore prima, caffeina 45-60' prima e una borraccia con 30-40 g di carboidrati durante il riscaldamento.</span></div>`;
+  }
+
+
+  /* ---------- protocollo gara ---------- */
+  const RACE = [
+    {t:"Sabato · pranzo", items:[
+      "120 g di pane bianco fresco con 90 g di prosciutto crudo, cotto o bresaola",
+      "oppure un piatto di pasta con condimenti semplici"]},
+    {t:"Sabato · pomeriggio", items:[
+      "Acqua a piccoli sorsi",
+      "Almeno una borraccia da 500 ml con 2 misurini di Isotonic Enervit",
+      "1 banana"]},
+    {t:"Sabato · cena", items:[
+      "120 g di pasta con olio e grana, più un secondo semplice: pollo, tacchino o 2 uova sode",
+      "oppure una pizza senza mozzarella, tipo schiacciata con crudo o rossa con crudo"]},
+    {t:"Colazione · 2,5 ore prima", items:[
+      "10 fette biscottate di kamut o senza glutine con un velo di marmellata e un velo di olio di cocco",
+      "150 g di yogurt greco 0%"]},
+    {t:"Trasferimento e griglia", items:[
+      "500 ml di acqua con 40 g di Isocarb C21, a sorsi durante il viaggio",
+      "1 barretta C21 appena entri in griglia",
+      "1 gel Enervit C21 con sodio"]},
+    {t:"In gara", items:[
+      "2 borracce da 750 ml, ognuna con 60 g di Isocarb C21 e 30 g di Isotonic Enervit: un sorso ogni 10 minuti",
+      "Al km 75 riempi una borraccia con acqua e una busta da 60 g di Isocarb C21",
+      "Ogni 40 minuti un gel Enervit C21 sodio, alternato al pickle shot di sicurezza"]},
+  ];
+  function renderRace(){
+    const el = document.getElementById("race-body"); if (!el) return;
+    el.innerHTML = `<ol class="race">${RACE.map(s=>`<li><span class="race-t">${esc(s.t)}</span><ul>${s.items.map(i=>`<li>${esc(i)}</li>`).join("")}</ul></li>`).join("")}</ol>`;
   }
 
   /* ---------- VALORI ---------- */
@@ -1032,6 +1073,7 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
 
   renderGym();
   renderSupp();
+  renderRace();
   renderSettings();
   renderDiag();
   loadCache();
