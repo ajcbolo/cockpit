@@ -149,6 +149,8 @@ details.card .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12
 .race-t{font-family:var(--f-display);font-weight:600;color:var(--gold-hi);letter-spacing:.03em}
 .race ul{margin:4px 0 0;padding-left:16px;display:flex;flex-direction:column;gap:3px;font-size:.88rem;color:var(--fg)}
 .race ul li::marker{color:var(--gold-lo)}
+.prod{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:3px;font-size:.88rem}
+.prod li::marker{color:var(--gold)}
 /* tab bar */
 nav.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;
   padding:6px max(10px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px));
@@ -243,7 +245,7 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
   <!-- INTEGRAZIONE -->
   <main class="view" id="v-integrazione" data-view="integrazione" hidden style="display:flex;flex-direction:column;gap:14px">
     <section class="panel">
-      <div class="row"><span class="lbl">Carboidrati in sella</span><span class="small muted">prossime uscite</span></div>
+      <div class="row"><span class="lbl">Cosa portare</span><span class="small muted">per le prossime sedute</span></div>
       <div id="fuel-body"><div class="skel"></div></div>
       <p class="note">In acqua: 500-750 ml all'ora, di più con il caldo. Oltre le 2 ore aggiungi uno stick di elettroliti Cetilar: con i gel al sodio arrivi a circa 400-700 mg di sodio all'ora.</p>
     </section>
@@ -256,15 +258,14 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
       <div id="burn-body"><div class="skel"></div></div>
     </section>
     <section class="panel">
-      <div class="row"><span class="lbl">Protocollo gara</span><span class="small muted">dal giorno prima al traguardo</span></div>
-      <p class="small muted">Il piano usato per la Strade Bianche. Va bene per gare e granfondo dalle 3 ore in su.</p>
-      <div id="race-body"></div>
-    </section>
-    <section class="panel">
       <span class="lbl">Integratori</span>
       <div id="supp-body"></div>
       <p class="note">Indicazioni generali per ciclisti amatori. Prima di iniziare un integratore, soprattutto vitamina D o se prendi farmaci, parlane con il medico.</p>
     </section>
+    <details class="card" id="race-card">
+      <summary><span><span class="t">Protocollo gara</span><br><span class="s">Strade Bianche · dal giorno prima al traguardo</span></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></summary>
+      <div class="body"><div id="race-body"></div></div>
+    </details>
   </main>
 
   <!-- VALORI -->
@@ -699,18 +700,48 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
   }
   const weight = () => state.profile?.weight || null;
 
+  // valori di riferimento, da controllare sull'etichetta
+  const CARB = {isocarb:0.95, gel:25, bar:30};
+  function productPlan(e){
+    const f = fuelFor(e), h = f.mins/60;
+    let lines = [], carbs = 0;
+    if (f.kind==="Solo acqua"){
+      lines = ["1 borraccia d'acqua", "Niente gel né barrette: è recupero, arrivaci dopo un pasto normale"];
+    } else if (f.kind==="Qualità breve"){
+      lines = ["1 borraccia da 500 ml con 30 g di Isocarb 2:1, a sorsi durante le ripetute", "1 gel 2:1 limone con sodio in tasca, solo se calano le gambe nelle ultime serie"];
+      carbs = 30*CARB.isocarb;
+    } else if (f.kind==="Qualità"){
+      lines = ["1 borraccia da 750 ml con 50 g di Isocarb 2:1", "1 gel 2:1 limone con sodio a metà seduta, prima del blocco più duro"];
+      carbs = 50*CARB.isocarb + CARB.gel;
+    } else {
+      const target = 70*h;
+      const bottles = Math.max(2, Math.ceil(h*0.6));
+      const fromBottles = bottles*60*CARB.isocarb;
+      const gels = Math.max(1, Math.ceil((target - fromBottles - CARB.bar)/CARB.gel));
+      lines = [
+        `${bottles} borracce da 750 ml, ognuna con 60 g di Isocarb 2:1${h>2?", e uno stick Cetilar nella seconda":""}`,
+        "1 barretta 2:1 brownie nella prima ora, quando lo stomaco tollera meglio il solido",
+        `${gels} gel 2:1 limone con sodio, uno ogni 40' dalla seconda ora`
+      ];
+      if (bottles>2) lines.push("Ricarica al rifornimento con un'altra busta da 60 g di Isocarb 2:1");
+      carbs = fromBottles + CARB.bar + gels*CARB.gel;
+    }
+    return {f, lines, carbs: Math.round(carbs/5)*5, perH: f.mins ? Math.round(carbs/h) : 0};
+  }
   function renderFuel(){
     const ev = state.events;
     if (!ev) return;
-    const rides = ev.filter(e => evDay(e) >= TODAY && /WORKOUT/i.test(e.category||"") && BIKE.test(e.type||"")).slice(0,4);
-    if (!rides.length){ $("fuel-body").innerHTML = `<div class="state">Nessuna uscita in bici nel calendario.</div>`; }
-    else $("fuel-body").innerHTML = `<ul class="list">${rides.map(e=>{
-      const f = fuelFor(e);
-      const big = f.hi ? `${f.total[0]}-${f.total[1]} g` : "0 g";
-      const per = f.hi ? `${f.lo}-${f.hi} g/h` : "pasto normale prima";
-      return `<li><div class="fuel"><span class="small muted">${evDay(e)===TODAY?"Oggi":esc(fmtDay(evDay(e)))} · ${f.mins}′ · ${esc(f.kind)}</span><span></span><span class="act-name">${esc(stripPrefix(e.name))}</span><span class="big">${big}</span><span class="small muted">${f.hi?`${f.bottles} borracce da 500 ml · ${f.mins>120?"con sali":"acqua"}`:"una borraccia d'acqua"}</span><span class="small muted" style="text-align:right">${per}</span></div></li>`;
+    const sessions = ev.filter(e => evDay(e) >= TODAY && /WORKOUT/i.test(e.category||"") && (BIKE.test(e.type||"") || e.type==="WeightTraining")).slice(0,6);
+    if (!sessions.length){ $("fuel-body").innerHTML = `<div class="state">Nessuna seduta nel calendario.</div>`; renderDay(); return; }
+    $("fuel-body").innerHTML = `<ul class="list">${sessions.map(e=>{
+      const day = evDay(e)===TODAY ? "Oggi" : esc(fmtDay(evDay(e)));
+      if (e.type==="WeightTraining"){
+        return `<li><div class="fuel"><span class="small muted">${day} · Palestra</span><span></span><span class="act-name">${esc(stripPrefix(e.name))}</span><span class="big">0 g</span></div><ul class="prod"><li>Durante solo acqua</li><li>Entro 1-2 ore un pasto con 25-40 g di proteine</li></ul></li>`;
+      }
+      const p = productPlan(e);
+      return `<li><div class="fuel"><span class="small muted">${day} · ${p.f.mins}′ · ${esc(p.f.kind)}</span><span class="small muted" style="text-align:right">${p.carbs?`circa ${p.perH} g/h`:""}</span><span class="act-name">${esc(stripPrefix(e.name))}</span><span class="big">${p.carbs?`~${p.carbs} g`:"0 g"}</span></div><ul class="prod">${p.lines.map(l=>`<li>${esc(l)}</li>`).join("")}</ul></li>`;
     }).join("")}</ul>
-    <p class="note">Con i tuoi prodotti: Enervit Isocarb 2:1 in borraccia, un gel Enervit 2:1 limone con sodio ogni 40 minuti, una barretta Enervit 2:1 brownie nella prima ora, e uno stick di elettroliti Cetilar nella seconda borraccia oltre le 2 ore. Usa le uscite lunghe per provare le dosi della gara, così l'intestino si abitua.</p>`;
+    <p class="note">I grammi totali sono stimati con valori medi dei prodotti: Isocarb quasi tutto carboidrato, circa 25 g per gel e 30 g per barretta. Controlla le etichette e dimmi se i valori sono diversi.</p>`;
     renderDay();
   }
   function renderDay(){
