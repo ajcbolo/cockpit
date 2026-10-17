@@ -151,6 +151,26 @@ details.card .body{padding:0 16px 16px;display:flex;flex-direction:column;gap:12
 .race ul li::marker{color:var(--gold-lo)}
 .prod{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:3px;font-size:.88rem}
 .prod li::marker{color:var(--gold)}
+.rep-head{display:flex;flex-direction:column;gap:2px}
+.rep-title{font-family:var(--f-display);font-weight:600;font-size:1.25rem;line-height:1.15;overflow-wrap:anywhere}
+.rep-vs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.rep-vs .m b{font-weight:600;font-size:.92rem;overflow-wrap:anywhere}
+.rep-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.rep-stats .m{padding:8px}
+.rep-stats .num{font-size:1.15rem}
+@media (max-width:420px){.rep-stats{grid-template-columns:repeat(3,1fr)}}
+.zonebar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:rgba(255,255,255,.05)}
+.zonebar span{display:block;height:100%}
+.zleg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.76rem;color:var(--muted);font-family:var(--f-mono)}
+.zleg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.ivals{display:flex;flex-wrap:wrap;gap:6px}
+.ivals span{font-family:var(--f-mono);font-size:.78rem;border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--gold-hi)}
+.ops{display:flex;flex-direction:column;gap:12px}
+.op{border-left:3px solid var(--muted);padding-left:12px;display:flex;flex-direction:column;gap:3px}
+.op.go{border-color:var(--go)} .op.warn{border-color:var(--warn)} .op.stop{border-color:var(--stop)} .op.info{border-color:var(--gold-lo)}
+.op b{font-family:var(--f-display);font-weight:600;font-size:1rem;letter-spacing:.02em}
+.op p{font-size:.9rem;color:var(--fg);max-width:62ch}
+.rep-ai-out{font-size:.92rem;line-height:1.5;white-space:pre-line;border:1px solid var(--line);border-radius:12px;padding:12px;background:rgba(0,0,0,.3);margin-top:10px}
 /* tab bar */
 nav.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:20;
   padding:6px max(10px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px));
@@ -201,6 +221,15 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
         <div class="m"><span class="lbl">HRV</span><div class="skel"></div></div>
         <div class="m"><span class="lbl">FC riposo</span><div class="skel"></div></div>
         <div class="m"><span class="lbl">Sonno</span><div class="skel"></div></div>
+      </div>
+    </section>
+
+    <section class="panel" id="report">
+      <div class="row"><span class="lbl">Report</span><span class="chip" id="rep-chip" hidden></span></div>
+      <div id="rep-body"><div class="skel"></div></div>
+      <div id="rep-ai" hidden>
+        <button class="btn" type="button" id="rep-ai-btn">Chiedi il parere di Claude</button>
+        <div class="rep-ai-out" id="rep-ai-out" aria-live="polite" hidden></div>
       </div>
     </section>
 
@@ -527,6 +556,186 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
       return `<li><span class="small muted">${esc(fmtDay(a.date))} · ${esc(typeIt[a.type]||a.type)}</span><span class="act-name">${esc(a.name)}</span><span class="stats">${st.join("")}</span>${flag?`<span class="flag">${esc(flag)}</span>`:""}</li>`;
     }).join("")}</ul>`;
   }
+
+
+  /* ---------- REPORT ---------- */
+  state.detail = null;
+  const BIKE_T = /Ride|Bike|Cyclocross|Velomobile/i;
+  function classifyPlan(evs){
+    const w = evs.filter(e=>/WORKOUT/i.test(e.category||""));
+    if (w.length){
+      const e = w.slice().sort((a,b)=>(b.duration_minutes||0)-(a.duration_minutes||0))[0];
+      const t = (e.name||"")+" "+(e.description||"");
+      let kind = "quality";
+      if (e.type==="WeightTraining" || /strength|pesi|palestra/i.test(t)) kind = "strength";
+      else if (/recupero|recovery/i.test(t)) kind = "recovery";
+      else if (/endurance|fondo|\bz2\b|lungo/i.test(t) || (e.duration_minutes||0) >= 150) kind = "endurance";
+      return {kind, name: stripPrefix(e.name), mins: e.duration_minutes || null, desc: e.description||""};
+    }
+    const n = evs.find(e=>/day off/i.test(e.name||""));
+    if (n) return /libero|aerobic/i.test(n.name||"") ? {kind:"free", name:"Allenamento aerobico libero"} : {kind:"rest", name: /stretching|core/i.test(n.description||"") ? "Riposo con stretching e core" : "Riposo"};
+    return {kind:"none", name:"Niente in calendario"};
+  }
+  function readinessFor(day){
+    const recs = (state.wellness?.records||[]).filter(r=>r && r.date);
+    const t = recs.find(r=>r.date===day); if (!t) return null;
+    const prev = recs.filter(r=>r.date<day);
+    const hm = mean(prev.map(r=>r.hrv).filter(v=>v!=null)), rm = mean(prev.map(r=>r.resting_hr).filter(v=>v!=null));
+    const g = (v,a,b)=> v==null?null:(a(v)?0:b(v)?1:2);
+    const pts = [t.hrv!=null&&hm?g(t.hrv/hm,x=>x>=.95,x=>x>=.85):null, t.resting_hr!=null&&rm?g(t.resting_hr-rm,x=>x<=2,x=>x<=5):null, g(t.sleep_hours,x=>x>=7,x=>x>=6)].filter(v=>v!=null);
+    const tot = pts.reduce((a,b)=>a+b,0);
+    return {s: !pts.length?"none":tot>=4?"stop":tot>=2?"warn":"go", sleep:t.sleep_hours, hrv:t.hrv, hrvMean:hm, rhr:t.resting_hr, rhrMean:rm};
+  }
+  function reportActivity(){
+    const acts = state.history?.activities || [];
+    if (!acts.length) return null;
+    const a = acts[0];
+    if ((a.date||"").slice(0,10) < addDays(TODAY,-3)) return null;
+    return a;
+  }
+  const ZCOL = ["#5a5446","#8a7a52","#b39550","#d4af5a","#f0c66b","#ff9d4d","#ff6058"];
+  const ZN = ["Z1","Z2","Z3","Z4","Z5","Z6","Z7"];
+  function zoneSummary(z){
+    if (!z) return null;
+    const secs = ZN.map(k=>Number(z[k])||0); const tot = secs.reduce((a,b)=>a+b,0);
+    if (!tot) return null;
+    return {secs, tot, low:(secs[0]+secs[1])/tot, mid:secs[2]/tot, high:(secs[3]+secs[4]+secs[5]+secs[6])/tot, highMin:Math.round((secs[3]+secs[4]+secs[5]+secs[6])/60)};
+  }
+  function zoneBarHtml(zs, label){
+    return `<div class="zonebar" role="img" aria-label="${esc(label)}">${zs.secs.map((v,i)=>v?`<span style="width:${(v/zs.tot*100).toFixed(2)}%;background:${ZCOL[i]}"></span>`:"").join("")}</div>
+      <div class="zleg">${zs.secs.map((v,i)=>v>=60?`<span><i style="background:${ZCOL[i]}"></i>${ZN[i]} ${Math.round(v/60)}′</span>`:"").join("")}</div>`;
+  }
+  const mm = m => m>=60 ? `${Math.floor(m/60)}h${String(Math.round(m%60)).padStart(2,"0")}` : `${Math.round(m)}′`;
+
+  function buildOpinion(a, d, plan, rd, next, ftp, form){
+    const ops = [];
+    const mins = a.duration_minutes || 0, tss = a.tss || 0, np = a.normalized_power, hr = a.average_hr, ap = a.average_power;
+    const IF = d?.IF ?? (np && ftp ? np/ftp : null);
+    const zs = zoneSummary(d?.zones) || zoneSummary(d?.hrZones);
+    const isBike = BIKE_T.test(a.type||"");
+    const isGym = a.type==="WeightTraining";
+    const h = mins/60;
+
+    // 1. piano contro fatto
+    if (isGym){
+      ops.push(plan.kind==="strength" ? {t:"go", h:"Palestra come da piano", p:`Seduta di forza fatta, ${mins}′ con FC media ${hr||"–"}. Ricorda il pasto con 25-40 g di proteine entro un paio d'ore.`}
+        : {t:"info", h:"Palestra fuori programma", p:`Oggi il piano diceva: ${plan.name.toLowerCase()}. Una seduta di forza non pesa sulle gambe come una uscita lunga, ma evita squat e stacchi pesanti il giorno prima della qualità in bici.`});
+    } else if (plan.kind==="rest" && tss>40){
+      ops.push({t:"stop", h:"Era un giorno di riposo", p:`Il coach aveva messo ${plan.name.toLowerCase()}, tu hai fatto ${mm(mins)} con ${tss} TSS. Un riposo saltato non rovina il blocco, ma la fatica si somma: il riposo serve ad assorbire il lavoro dei giorni prima, ed è lì che si alza la FTP. Se ti capita di avere tempo libero nel giorno sbagliato, chiedi al coach di spostare le sedute invece di aggiungerne una.`});
+    } else if (plan.kind==="recovery"){
+      const over = (np && np>RECOVERY_W) || (ap && ap>RECOVERY_W) || (hr && hr>RECOVERY_HR);
+      ops.push(over ? {t:"warn", h:"Recupero troppo forte", p:`Il recupero va fatto sotto ${RECOVERY_W} W e ${RECOVERY_HR} bpm. Oggi ${ap?`media ${ap} W`:""}${np?`, NP ${np} W`:""}${hr?`, FC ${hr}`:""}. È il tuo punto debole noto: un recupero fatto forte non è allenamento in più, è recupero in meno.`}
+        : {t:"go", h:"Recupero fatto bene", p:`Sei rimasto sotto ${RECOVERY_W} W e ${RECOVERY_HR} bpm: esattamente quello che serviva.`});
+    } else if (plan.kind==="endurance"){
+      const short = plan.mins && mins < plan.mins*0.8, hard = (IF && IF>0.75) || (zs && (zs.low<0.6 || zs.highMin > mins*0.15));
+      ops.push(hard ? {t:"warn", h:"Fondo più forte del previsto", p:`Il piano chiedeva tempo in Z2. ${IF?`L'intensità è stata ${dec(IF,2)} della FTP`:""}${zs?`${IF?", con":"Hai passato"} solo il ${Math.round(zs.low*100)}% del tempo in Z1 e Z2`:""}. Il fondo lavora se resta facile: le salite fatte forte trasformano un lungo in un medio che stanca senza dare lo stesso adattamento.`}
+        : {t:"go", h:"Fondo eseguito come richiesto", p:`${mm(mins)} con intensità controllata${zs?`, ${Math.round(zs.low*100)}% del tempo in Z1 e Z2`:""}. Questo è il lavoro che costruisce la base per la FTP.`});
+      if (short) ops.push({t:"info", h:"Più corta del previsto", p:`Previste ${mm(plan.mins)}, fatte ${mm(mins)}.`});
+    } else if (plan.kind==="quality"){
+      ops.push({t:"info", h:"Seduta di qualità", p:`In programma: ${plan.name}. ${d?.intervals?.length?`Blocchi riconosciuti: ${d.intervals.slice(0,4).join(", ")}.`:""} Confronta i watt dei blocchi con quelli richiesti dal coach: se l'ultimo è calato più del 5% rispetto al primo, la prossima volta parti un filo più piano.`});
+    } else if (plan.kind==="free"){
+      ops.push(IF && IF>0.75 ? {t:"warn", h:"Giornata libera, ma intensa", p:`Era una giornata aerobica libera e l'intensità è stata ${dec(IF,2)} della FTP. Libera vuol dire facile, non a sensazione.`}
+        : {t:"go", h:"Giornata aerobica libera", p:`Uscita facile come richiesto, ${mm(mins)}.`});
+    } else {
+      ops.push({t:"info", h:"Uscita fuori calendario", p:`Non c'era niente in programma. ${mm(mins)} e ${tss} TSS che si sommano al carico della settimana.`});
+    }
+
+    if (isBike && zs){
+      // 2. distribuzione
+      if (mins >= 120 && plan.kind!=="endurance" && (zs.low < 0.6 || zs.highMin > mins*0.15)){
+        ops.push({t:"warn", h:"Troppi strappi per un'uscita lunga", p:`Solo il ${Math.round(zs.low*100)}% del tempo in Z1 e Z2, e ${zs.highMin}′ sopra soglia. Su ${mm(mins)} vuol dire che ogni salita è diventata una ripetuta. Per i lunghi tieni d'occhio il limite dei ${Z2_TOP} W anche in salita, alleggerendo il rapporto.`});
+      }
+      // 3. tenuta aerobica
+      if (d?.decoupling!=null && mins >= 60){
+        const dc = d.decoupling, irregular = d.vi && d.vi > 1.15;
+        const note = irregular ? ` Con un percorso così irregolare (VI ${dec(d.vi,2)}) il dato è indicativo.` : "";
+        if (dc < 5) ops.push({t:"go", h:"Buona tenuta aerobica", p:`Deriva cardiaca ${dec(dc,1)}%: il cuore è rimasto stabile a parità di watt fino alla fine.${note}`});
+        else if (dc < 10) ops.push({t:"warn", h:`Deriva cardiaca ${dec(dc,1)}%`, p:`Nell'ultima parte il cuore è salito a parità di watt. Su un'uscita di ${mm(mins)} succede quando mancano carboidrati, fa caldo o la fatica dei giorni prima si fa sentire.${note}`});
+        else ops.push({t:"stop", h:`Deriva cardiaca alta, ${dec(dc,1)}%`, p:`Il cuore è salito molto a parità di watt nella seconda parte: segnale di fatica o di rifornimento insufficiente.${note}`});
+      }
+      // 4. rifornimento
+      if (mins >= 90){
+        const lo = Math.round(60*h/10)*10, hi = Math.round(80*h/10)*10;
+        const used = d?.carbsUsed ?? a.carbs_used_g, ate = d?.carbsIn ?? a.carbs_ingested_g;
+        if (ate) ops.push({t: ate >= lo ? "go":"warn", h:"Rifornimento", p:`Hai registrato ${ate} g di carboidrati, ${Math.round(ate/h)} g all'ora. Per ${mm(mins)} il riferimento è ${lo}-${hi} g.`});
+        else ops.push({t:"info", h:"Rifornimento", p:`Per ${mm(mins)} servivano circa ${lo}-${hi} g di carboidrati${used?`; intervals.icu stima che ne hai consumati ${used} g`:""}. Con i tuoi prodotti: ${Math.max(2,Math.ceil(h*0.6))} borracce con 60 g di Isocarb 2:1, una barretta brownie nella prima ora e un gel ogni 40′ dalla seconda. Se segni quanto hai mangiato nell'attività su intervals.icu, qui ti dico se era abbastanza.`});
+      }
+    }
+
+    // 5. recupero e contesto
+    if (rd && rd.sleep!=null && rd.sleep < 6.5 && tss >= 100){
+      ops.push({t:"warn", h:"Poco sonno sotto un carico alto", p:`Hai dormito ${dec(rd.sleep)} ore e fatto ${tss} TSS. Stanotte punta ad almeno 7 ore e mezza: è la cosa che oggi ti fa recuperare di più.`});
+    }
+    if (form){
+      const fp = form.ctl ? (form.ctl-form.atl)/form.ctl*100 : 0;
+      if (fp < -30) ops.push({t:"stop", h:"Forma in zona di rischio", p:`Forma ${Math.round(fp)}%: la fatica supera di molto la fitness. Servono un paio di giorni leggeri.`});
+    }
+
+    // 6. domani
+    if (next){
+      const dayLbl = evDay(next)===addDays((a.date||"").slice(0,10),1) ? "Domani" : fmtDay(evDay(next));
+      const nk = classifyPlan([next]).kind, heavy = tss >= 120 || (rd && rd.s!=="go");
+      if (nk==="endurance" && heavy) ops.push({t:"warn", h:`${dayLbl}: ${stripPrefix(next.name)}`, p:`Dopo oggi tienila davvero facile: sotto ${Z2_TOP} W e circa 150 bpm anche in salita. Se al mattino il semaforo è rosso, accorciala a 2 ore. Due lunghi forti di fila sono la ricetta per arrivare stanco al test del 3 novembre.`});
+      else if (nk==="quality" && heavy) ops.push({t:"warn", h:`${dayLbl}: ${stripPrefix(next.name)}`, p:`Arrivi alla qualità con carico addosso. Fai un riscaldamento lungo e se i watt dei primi blocchi non arrivano, chiudi prima invece di forzare.`});
+      else ops.push({t:"info", h:`${dayLbl}: ${stripPrefix(next.name)}`, p: nk==="recovery" ? `Recupero vero: sotto ${RECOVERY_W} W e ${RECOVERY_HR} bpm.` : "Arrivaci riposato, il programma è coerente con quello che hai fatto oggi."});
+    } else if (tss >= 120){
+      ops.push({t:"go", h:"Domani riposo", p:"È il momento giusto per assorbire il lavoro di oggi."});
+    }
+    return ops;
+  }
+
+  function renderReport(){
+    const body = $("rep-body"); if (!body) return;
+    const a = reportActivity();
+    const todayPlan = classifyPlan((state.events||[]).filter(e=>evDay(e)===TODAY));
+    if (!a){
+      body.innerHTML = `<div class="state"><span>Nessuna attività negli ultimi giorni.</span><span>Oggi: <b style="color:var(--fg)">${esc(todayPlan.name)}</b></span></div>`;
+      $("rep-chip").hidden = true; repCtx = null; return;
+    }
+    const day = (a.date||"").slice(0,10);
+    const evs = state.events || [];
+    const plan = classifyPlan(evs.filter(e=>evDay(e)===day));
+    const next = evs.find(e=>evDay(e)>day && /WORKOUT/i.test(e.category||"")) || null;
+    const ftp = state.profile?.ride?.ftp || 260;
+    const d = state.detail && state.detail.id===a.id ? state.detail : null;
+    const rd = readinessFor(day);
+    const form = (state.fitness?.data||[]).find(x=>x.date===day) || null;
+    const ops = buildOpinion(a, d, plan, rd, next, ftp, form);
+    const worst = ops.some(o=>o.t==="stop") ? "stop" : ops.some(o=>o.t==="warn") ? "warn" : "go";
+    const chip = $("rep-chip"); chip.hidden = false;
+    chip.textContent = {go:"Ben fatto", warn:"Con riserva", stop:"Da rivedere"}[worst];
+    chip.style.color = chip.style.borderColor = `var(--${worst})`;
+
+    const IF = d?.IF ?? (a.normalized_power ? a.normalized_power/ftp : null);
+    const stat = (l,v,u) => `<div class="m"><span class="lbl">${l}</span><span class="num">${v}<span class="unit"> ${u}</span></span></div>`;
+    const stats = [
+      stat("Durata", mm(a.duration_minutes||0), ""),
+      stat("TSS", a.tss??"–", ""),
+      a.normalized_power ? stat("NP", a.normalized_power, "W") : stat("FC", a.average_hr??"–", "bpm"),
+      IF ? stat("IF", dec(IF,2), "") : "",
+      d?.elev ? stat("Dislivello", Math.round(d.elev), "m") : (a.distance_km ? stat("Distanza", String(a.distance_km).replace(".",","), "km") : ""),
+      a.normalized_power && a.average_hr ? stat("FC media", a.average_hr, "bpm") : "",
+      d?.decoupling!=null ? stat("Deriva", dec(d.decoupling,1), "%") : "",
+      d?.vi ? stat("VI", dec(d.vi,2), "") : "",
+    ].filter(Boolean).join("");
+    const zs = zoneSummary(d?.zones), hz = !zs ? zoneSummary(d?.hrZones) : null;
+    const pendingToday = day !== TODAY && todayPlan.kind!=="none" && todayPlan.kind!=="rest" && !(state.history?.activities||[]).some(x=>(x.date||"").slice(0,10)===TODAY);
+    body.innerHTML = `
+      <div class="rep-head"><span class="small muted">${day===TODAY?"Oggi":esc(fmtDay(day,{weekday:"long",day:"numeric",month:"short"}))}</span><span class="rep-title">${esc(a.name)}</span></div>
+      ${pendingToday?`<p class="small" style="color:var(--gold-hi)">Oggi in programma: ${esc(todayPlan.name)}, non ancora registrata. Qui sotto il report dell'ultima uscita.</p>`:""}
+      <div class="rep-vs">
+        <div class="m"><span class="lbl">Previsto</span><b>${esc(plan.name)}${plan.mins?` · ${mm(plan.mins)}`:""}</b></div>
+        <div class="m"><span class="lbl">Fatto</span><b>${esc(mm(a.duration_minutes||0))} · ${a.tss??"–"} TSS</b></div>
+      </div>
+      <div class="rep-stats">${stats}</div>
+      ${zs?`<div class="lbl">Tempo per zona di potenza</div>${zoneBarHtml(zs,"Tempo per zona di potenza")}`:hz?`<div class="lbl">Tempo per zona cardio</div>${zoneBarHtml(hz,"Tempo per zona cardio")}`:(d===null && BIKE_T.test(a.type||"")?`<div class="skel"></div>`:"")}
+      ${d?.intervals?.length?`<div class="lbl">Sforzi riconosciuti</div><div class="ivals">${d.intervals.slice(0,6).map(t=>`<span>${esc(t)}</span>`).join("")}</div>`:""}
+      <div class="lbl">Il mio parere</div>
+      <div class="ops">${ops.map(o=>`<div class="op ${o.t}"><b>${esc(o.h)}</b><p>${esc(o.p)}</p></div>`).join("")}</div>`;
+    repCtx = {a, d, plan, rd, next, ftp, form, ops};
+    if (typeof onReportRendered === "function") onReportRendered();
+  }
+  let repCtx = null;
 
   /* ---------- PALESTRA ---------- */
   const PHASES = [
@@ -996,16 +1205,16 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
   const LOADERS = [
     {key:"profile", body:["val-head","zones-body","hr-body"], run: async()=> normProfile(await api("")), after:()=>{renderValues();renderActs();renderDay();renderSupp();}},
     {key:"wellness", body:["ready-metrics","form-body"], run: async()=> normWellness(await api("/wellness", {oldest:addDays(TODAY,-42), newest:TODAY})),
-      after:()=>{ state.fitness = fitnessFrom(state.wellness); renderReady(); renderForm(); renderValues(); }},
-    {key:"events", body:["plan-body","fuel-body"], run: async()=> normEvents(await api("/events", {oldest:TODAY, newest:addDays(TODAY,10)})), after:()=>{renderPlan();renderReady();renderFuel();renderGymNext();}},
-    {key:"history", body:["acts-body","burn-body"], run: async()=> normActivities(await api("/activities", {oldest:addDays(TODAY,-14), newest:addDays(TODAY,1)})), after:()=>{renderActs();renderBurn();}},
+      after:()=>{ state.fitness = fitnessFrom(state.wellness); renderReady(); renderForm(); renderValues(); renderReport(); }},
+    {key:"events", body:["plan-body","fuel-body"], run: async()=> normEvents(await api("/events", {oldest:addDays(TODAY,-3), newest:addDays(TODAY,10)})), after:()=>{renderPlan();renderReady();renderFuel();renderGymNext();renderReport();}},
+    {key:"history", body:["acts-body","burn-body"], run: async()=> normActivities(await api("/activities", {oldest:addDays(TODAY,-14), newest:addDays(TODAY,1)})), after:()=>{renderActs();renderBurn();renderReport();}},
     {key:"curves", body:["curve-body"], run: async()=> normCurves(await api("/power-curves.json", {curves:"90d", type:"Ride"}), state.profile?.weight), after:renderCurve},
   ];
   const diag = {};
 
   function saveCache(){
     const c = {t: Date.now(), d: {}};
-    ["profile","wellness","events","history","curves"].forEach(k=>{ if (state[k]) c.d[k] = state[k]; });
+    ["profile","wellness","events","history","curves","detail"].forEach(k=>{ if (state[k]) c.d[k] = state[k]; });
     store.set(CACHE_KEY, JSON.stringify(c));
   }
   function loadCache(){
@@ -1013,6 +1222,7 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
       const c = JSON.parse(store.get(CACHE_KEY)||"null"); if (!c) return false;
       Object.assign(state, c.d);
       if (state.wellness) state.fitness = fitnessFrom(state.wellness);
+      try{ renderReport(); }catch(e){}
       LOADERS.forEach(l=>{ if (state[l.key]) { try{ l.after(); }catch(e){} } });
       setUpdated(c.t, true);
       return true;
@@ -1020,6 +1230,34 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
   }
   function setUpdated(t, cached){
     $("updated").textContent = (cached ? "Ultimi dati salvati: " : "Aggiornato ") + new Date(t).toLocaleString("it-IT",{hour:"2-digit",minute:"2-digit",day:"numeric",month:"short",timeZone:TZ});
+  }
+
+
+  async function apiAbs(p, params){
+    const c = cfg();
+    const base = (c.proxy || "https://intervals.icu").replace(/\/+$/,"");
+    const q = params ? "?" + new URLSearchParams(params).toString() : "";
+    const headers = { "Accept":"application/json" };
+    if (!c.proxy) headers["Authorization"] = "Basic " + btoa("API_KEY:" + (c.key||""));
+    let r;
+    try{ r = await fetch(base + p + q, {headers, cache:"no-store"}); }
+    catch(e){ const err = new Error("network"); err.code = "network"; throw err; }
+    if (!r.ok){ const err = new Error("http "+r.status); err.code = r.status===401||r.status===403 ? "auth" : "http"; err.status = r.status; throw err; }
+    return r.json();
+  }
+  function normDetailWeb(a){
+    const z = {}; (a.icu_zone_times||[]).forEach(o=>{ if (o && o.id) z[o.id] = o.secs; });
+    const hz = {}; (a.icu_hr_zone_times||[]).forEach((v,i)=>{ hz["Z"+(i+1)] = v; });
+    const IF = a.icu_intensity!=null ? (a.icu_intensity > 3 ? a.icu_intensity/100 : a.icu_intensity) : null;
+    return {id:a.id, zones:Object.keys(z).length?z:null, hrZones:Object.keys(hz).length?hz:null, decoupling:a.decoupling??null,
+      ef:a.icu_efficiency_factor??null, IF, vi:a.icu_variability_index??null, elev:a.total_elevation_gain??null,
+      intervals:Array.isArray(a.interval_summary)?a.interval_summary:[], carbsUsed:a.carbs_used??null, carbsIn:a.carbs_ingested??null};
+  }
+  async function loadDetail(){
+    const a = reportActivity(); if (!a || a.type==="WeightTraining") return;
+    try{ state.detail = normDetailWeb(await apiAbs(`/api/v1/activity/${encodeURIComponent(a.id)}`)); diag.detail = {ok:true}; }
+    catch(e){ if (!(state.detail && state.detail.id===a.id)) state.detail = {id:a.id}; diag.detail = {ok:false, e}; }
+    renderReport();
   }
 
   let loading = false, lastLoad = 0;
@@ -1039,6 +1277,7 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
         catch(e){ diag[l.key] = {ok:false, e}; errs.push(e); if (!state[l.key]) showErr(l.body, l.key, e); }
       }));
     })();
+    await loadDetail();
     loading = false; lastLoad = Date.now();
     $("refresh").textContent = "Aggiorna";
     if (anyOk){ saveCache(); setUpdated(Date.now(), false); }
@@ -1077,7 +1316,7 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
     $("set-proxy").value = c.proxy || "";
   }
   function renderDiag(){
-    const labels = {profile:"Profilo atleta", wellness:"Benessere e forma", events:"Calendario", history:"Attività", curves:"Curva di potenza"};
+    const labels = {profile:"Profilo atleta", wellness:"Benessere e forma", events:"Calendario", history:"Attività", detail:"Dettaglio uscita", curves:"Curva di potenza"};
     const rows = Object.keys(labels).map(k=>{
       const d = diag[k];
       const st = !d ? `<span class="muted">non ancora letto</span>` : d.ok ? `<span style="color:var(--go)">ok</span>` : `<span style="color:var(--stop)">${esc(d.e?.code||"errore")}${d.e?.status?" "+d.e.status:""}</span>`;

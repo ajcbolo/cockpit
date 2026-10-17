@@ -14,7 +14,7 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { headers: cors });
     if (req.method !== "GET") return new Response("Solo lettura", { status: 405, headers: cors });
     const url = new URL(req.url);
-    if (!url.pathname.startsWith("/api/v1/athlete/")) return new Response("Percorso non ammesso", { status: 404, headers: cors });
+    if (!/^\/api\/v1\/(athlete|activity)\//.test(url.pathname)) return new Response("Percorso non ammesso", { status: 404, headers: cors });
     const upstream = "https://intervals.icu" + url.pathname + url.search;
     const r = await fetch(upstream, {
       headers: { Authorization: "Basic " + btoa("API_KEY:" + env.API_KEY), Accept: "application/json" },
