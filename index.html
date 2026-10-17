@@ -607,7 +607,7 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
   }
   const mm = m => m>=60 ? `${Math.floor(m/60)}h${String(Math.round(m%60)).padStart(2,"0")}` : `${Math.round(m)}′`;
 
-  function buildOpinion(a, d, plan, rd, next, ftp, form){
+  function buildOpinion(a, d, plan, rd, next, ftp, form, tomorrow){
     const ops = [];
     const mins = a.duration_minutes || 0, tss = a.tss || 0, np = a.normalized_power, hr = a.average_hr, ap = a.average_power;
     const IF = d?.IF ?? (np && ftp ? np/ftp : null);
@@ -672,14 +672,15 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
     }
 
     // 6. domani
+    if (tomorrow && (tomorrow.kind==="rest" || tomorrow.kind==="free")){
+      ops.push({t:"go", h: tomorrow.kind==="rest" ? "Domani riposo" : "Domani giornata libera", p: tomorrow.kind==="rest" ? `È il momento giusto per assorbire il lavoro di oggi. ${/stretching|core/i.test(tomorrow.name)?"Fai stretching e core, ma niente bici: il riposo vero è quello che ti fa arrivare fresco alla prossima qualità.":"Niente bici: il riposo vero è quello che ti fa arrivare fresco alla prossima qualità."}` : "Se esci, resta in Z1 e Z2."});
+    }
     if (next){
       const dayLbl = evDay(next)===addDays((a.date||"").slice(0,10),1) ? "Domani" : fmtDay(evDay(next));
-      const nk = classifyPlan([next]).kind, heavy = tss >= 120 || (rd && rd.s!=="go");
+      const nk = classifyPlan([next]).kind, isNextDay = evDay(next)===addDays((a.date||"").slice(0,10),1), heavy = isNextDay && (tss >= 120 || (rd && rd.s!=="go"));
       if (nk==="endurance" && heavy) ops.push({t:"warn", h:`${dayLbl}: ${stripPrefix(next.name)}`, p:`Dopo oggi tienila davvero facile: sotto ${Z2_TOP} W e circa 150 bpm anche in salita. Se al mattino il semaforo è rosso, accorciala a 2 ore. Due lunghi forti di fila sono la ricetta per arrivare stanco al test del 3 novembre.`});
       else if (nk==="quality" && heavy) ops.push({t:"warn", h:`${dayLbl}: ${stripPrefix(next.name)}`, p:`Arrivi alla qualità con carico addosso. Fai un riscaldamento lungo e se i watt dei primi blocchi non arrivano, chiudi prima invece di forzare.`});
-      else ops.push({t:"info", h:`${dayLbl}: ${stripPrefix(next.name)}`, p: nk==="recovery" ? `Recupero vero: sotto ${RECOVERY_W} W e ${RECOVERY_HR} bpm.` : "Arrivaci riposato, il programma è coerente con quello che hai fatto oggi."});
-    } else if (tss >= 120){
-      ops.push({t:"go", h:"Domani riposo", p:"È il momento giusto per assorbire il lavoro di oggi."});
+      else ops.push({t:"info", h:`${dayLbl}: ${stripPrefix(next.name)}`, p: nk==="recovery" ? `Recupero vero: sotto ${RECOVERY_W} W e ${RECOVERY_HR} bpm.` : !isNextDay ? "Con i giorni di riposo in mezzo ci arrivi fresco: è la seduta in cui spingere davvero sui watt richiesti." : "Arrivaci riposato, il programma è coerente con quello che hai fatto oggi."});
     }
     return ops;
   }
@@ -700,7 +701,8 @@ footer{font-size:.75rem;color:var(--muted);text-align:center;display:flex;flex-d
     const d = state.detail && state.detail.id===a.id ? state.detail : null;
     const rd = readinessFor(day);
     const form = (state.fitness?.data||[]).find(x=>x.date===day) || null;
-    const ops = buildOpinion(a, d, plan, rd, next, ftp, form);
+    const tomorrow = classifyPlan(evs.filter(e=>evDay(e)===addDays(day,1)));
+    const ops = buildOpinion(a, d, plan, rd, next, ftp, form, tomorrow);
     const worst = ops.some(o=>o.t==="stop") ? "stop" : ops.some(o=>o.t==="warn") ? "warn" : "go";
     const chip = $("rep-chip"); chip.hidden = false;
     chip.textContent = {go:"Ben fatto", warn:"Con riserva", stop:"Da rivedere"}[worst];
